@@ -1,4 +1,4 @@
-#!/bin/bash
+o#!/bin/bash
 
 xhost +local:
 docker run \
