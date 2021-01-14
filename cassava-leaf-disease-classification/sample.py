@@ -43,14 +43,31 @@ def get_img(path):
     return im_rgb
 
 
+class CassavaDataset(Dataset):
+    def __init__(
+        self,
+        df,
+        data_root,
+        transform=None,
+        output_label=True,
+        ):
+
+        super().__init__()
+    
+
+    
+
+    
+
+
 def run():
-    train = pd.read_csv('./data/train.csv')
+    train = pd.read_csv('../input/train.csv')
     print(train.head())
     print(train.label.value_counts())
-    submission = pd.read_csv('./data/sample_submission.csv')
+    submission = pd.read_csv('../input/sample_submission.csv')
     print(submission.head())
 
-    img = get_img('./data/train_images/1000015157.jpg')
+    img = get_img('../input/train_images/1000015157.jpg')
     plt.imshow(img)
     plt.show()
 
