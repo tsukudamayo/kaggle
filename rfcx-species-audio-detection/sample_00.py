@@ -7,14 +7,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import librosa
 
-import plotly.express as px
-
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 
 import albumentations
 
 
-class SpeciesModel(tez.Model):
+# class SpeciesModel(tez.Model):
     
 
 

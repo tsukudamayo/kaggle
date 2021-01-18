@@ -1,16 +1,40 @@
 import os
 import random
+import tqdm
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.model_selection import GroupKFold, StratifiedKFold
+from sklearn.metrics import roc_auc_score, log_loss
+import timm
 import torch
+from torch import nn
+from torch.utils.data import Dataset, DataLoader
 import cv2
+from albumentations import (
+    HorizontalFlip, VerticalFlip, IAAPerspective, ShiftScaleRotate, CLAHE, RandomRotate90,
+    Transpose, ShiftScaleRotate, Blur, OpticalDistortion, GridDistortion, HueSaturationValue,
+    IAAAdditiveGaussianNoise, GaussNoise, MotionBlur, MedianBlur, IAAPiecewiseAffine, RandomResizedCrop,
+    IAASharpen, IAAEmboss, RandomBrightnessContrast, Flip, OneOf, Compose, Normalize, Cutout, CoarseDropout, ShiftScaleRotate, CenterCrop, Resize
+)
 
+from albumentations.pytorch import ToTensorV2
+
+from albumentations import (
+    HorizontalFlip, VerticalFlip, IAAPerspective, ShiftScaleRotate, CLAHE,
+    RandomRotate90, Transpose, ShiftScaleRotate, Blur, OpticalDistortion,
+    GridDistortion, HueSaturationValue, IAAAdditiveGaussianNoise, GaussNoise,
+    MotionBlur, MedianBlur, IAAPiecewiseAffine, RandomResizedCrop,
+    IAASharpen, IAAEmboss, RandomBrightnessContrast, Flip, OneOf, Compose,
+    Normalize, Cutout, CoarseDropout, ShiftScaleRotate, CenterCrop, Resize
+)
+
+from albumentations.pytorch import ToTensorV2
 
 CFG = {
-    'fole_num': 5,
+    'fold_num': 5,
     'seed': 719,
-    'model_arch': 'tf_efficient_b4_ns',
+    'model_arch': 'tf_efficientnet_b4_ns',
     'img_size': 512,
     'epochs': 10,
     'train_bs': 32,
@@ -24,6 +48,33 @@ CFG = {
     'used_epochs': [6, 7, 8, 9],
     'weights': [1, 1, 1, 1]
 }
+
+
+class CassavaImgClassifier(nn.Module):
+    def __init__(self, model_arch, n_class, pretrained=False):
+        super().__init__()
+        self.model = timm.create_model(model_arch, pretrained=pretrained)
+        n_features = self.model.classifier.in_features
+        self.model.classifire = nn.Linear(n_features, n_class)
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
+
+
+def inference_one_epoch(model, data_loader, device):
+    model.eval()
+    pbar = tqdm(enumerate(data_loader), len(data_loader))
+    image_preds_all = []
+    for step, (imgs) in pbar:
+        imgs = imgs.to(device).float()
+        image_preds = model(imgs)
+        image_preds_all += [torch.softmax(image_preds, 1).detach().cpu().numpy()]
+
+    image_preds_all = np.concatenate(image_preds_all, axis=0)
+    
+    return image_preds_all
+
 
 
 def seed_everything(seed):
@@ -43,33 +94,183 @@ def get_img(path):
     return im_rgb
 
 
+def get_valid_transforms():
+    return Compose(
+        [
+            CenterCrop(CFG['img_size'], CFG['img_size'], p=1.),
+            Resize(CFG['img_size'], CFG['img_size']),
+            Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+                max_pixel_value=255.0,
+                p=1.0
+            ),
+            ToTensorV2(p=1.0),
+        ],
+        p=1,
+    )
+
+def get_inference_transforms():
+    return Compose(
+        [
+            RandomResizedCrop(CFG['img_size'], CFG['img_size']),
+            Transpose(p=0.5),
+            HorizontalFlip(p=0.5),
+            VerticalFlip(p=0.5),
+            HueSaturationValue(
+                hue_shift_limit=0.2,
+                sat_shift_limit=0.2,
+                val_shift_limit=0.2,
+                p=0.5,
+            ),
+            RandomBrightnessContrast(
+                brightness_limit=(-0.1,0.1),
+                contrast_limit=(-0.1, 0.1),
+                p=0.5,
+            ),
+            Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+                max_pixel_value=255.0,
+                p=1.0,
+            ),
+            ToTensorV2(p=1.0),
+        ],
+        p=1.
+    )
+                
+
 class CassavaDataset(Dataset):
     def __init__(
         self,
         df,
         data_root,
-        transform=None,
+        transforms=None,
         output_label=True,
         ):
 
         super().__init__()
-    
+        self.df = df.reset_index(drop=True).copy()
+        self.transform = transforms
+        self.data_root = data_root
+        self.output_label = output_label
 
-    
+    def __len__(self):
+        return self.df.shape[0]
 
-    
+    def __getitem__(self, index: int):
+        if self.output_label:
+            target = self.df.iloc[index]['label']
 
+        path = '{}/{}'.format(self.data_root, self.df.iloc[index]['image_id'])
+
+        img = get_img(path)
+
+        if self.transforms:
+            img = self.transform(image=img)['image']
+
+        if self.output_label == True:
+            return img, target
+        else:
+            return img
+    
 
 def run():
-    train = pd.read_csv('../input/train.csv')
+    # ------------ #
+    # load dataset #
+    # ------------ #
+    train = pd.read_csv('../input/cassava-leaf-disease-classification/train.csv')
     print(train.head())
     print(train.label.value_counts())
-    submission = pd.read_csv('../input/sample_submission.csv')
+    submission = pd.read_csv('../input/cassava-leaf-disease-classification/sample_submission.csv')
     print(submission.head())
 
-    img = get_img('../input/train_images/1000015157.jpg')
+    img = get_img('../input/cassava-leaf-disease-classification/train_images/1000015157.jpg')
     plt.imshow(img)
     plt.show()
+
+    # ---- #
+    # main #
+    # ---- #
+    seed_everything(CFG['seed'])
+    folds = StratifiedKFold(n_splits=CFG['fold_num'])\
+      .split(np.arange(train.shape[0]), train.label.values)
+    for fold, (trn_idx, val_idx) in enumerate(folds):
+        if fold > 0:
+            break
+
+        print('Inference fold {} started'.format(folds))
+
+        valid_ = train.loc[val_idx, :].reset_index(drop=True)
+        valid_ds = CassavaDataset(
+            valid_,
+            '../input/cassava-leaf-disease-classification/',
+            transforms=get_inference_transforms(),
+            output_label=False,
+        )
+
+        test = pd.DataFrame()
+        test['image_id'] = list(os.listdir(
+            '../input/cassava-leaf-disease-classification/test_images/'))
+        test_ds = CassavaDataset(
+            test,
+            '../input/cassava-leaf-disease-classification/test_images/',
+            transforms=get_inference_transforms(),
+            output_label=False,
+        )
+
+        val_loader = torch.utils.data.DataLoader(
+            valid_ds,
+            batch_size=CFG['valid_bs'],
+            num_workers=CFG['num_workers'],
+            shuffle=False,
+            pin_memory=False,
+        )
+
+        tst_loader = torch.utils.data.DataLoader(
+            test_ds,
+            batch_size=CFG['valid_bs'],
+            num_workers=CFG['num_workers'],
+            shuffle=False,
+            pin_memory=False,
+        )
+
+        device = torch.device(CFG['device'])
+        model = CassavaImgClassifier(
+            CFG['model_arch'],
+            train.label.nunique(),
+        ).to(device)
+
+        val_preds = []
+        tst_preds = []
+
+        for i, epoch in enumerate(CFG['used_epoches']):
+            model.load_state_dict(torch.load(
+                '../input/pytorch-efficientnet-baseline-train-amp-aug/{}_fold_{}_{}'.format(
+                    CFG['model_arch'],
+                    fold,
+                    epoch
+                    )
+                )
+            )
+            with torch.no_grad():
+                for _ in range(CFG['tta']):
+                    val_preds += [CFG['weights'][i]/sum(CFG['weights'])/CFG['tta']*inference_one_epoch(model, val_loader, device)]
+                    tst_preds += [CFG['weights'][i]/sum(CFG['weights'])/CFG['tta']*inference_one_epoch(model, tst_loader, device)]
+
+        val_preds = np.mean(val_preds, axis=0)
+        tst_preds = np.mean(tst_preds, axis=0)
+
+        print('fold {} validation loss = {:.5f}'.format(fold, log_loss(valid_.label.values, val_preds)))
+        print('fold {} validation accuracy = {:.5f}'.format(fold, (valid_.label.values==np.argmax(val_preds, axis=1)).mean()))
+
+        del model
+        torch.cuda.empty_cache()
+
+        test['label'] = np.argmax(tst_preds, axis=1)
+        print(test.head())
+
+        test.to_csv('submission.csv', index=False)
 
 
 def main():
