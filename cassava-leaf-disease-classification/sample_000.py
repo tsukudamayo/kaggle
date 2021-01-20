@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import GroupKFold, StratifiedKFold
 from sklearn.metrics import roc_auc_score, log_loss
 import timm
+from efficientnet_pytorch import efficientnet
 import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
@@ -199,12 +200,12 @@ def run():
         if fold > 0:
             break
 
-        print('Inference fold {} started'.format(folds))
+        print('Inference fold {} started'.format(fold))
 
         valid_ = train.loc[val_idx, :].reset_index(drop=True)
         valid_ds = CassavaDataset(
             valid_,
-            '../input/cassava-leaf-disease-classification/',
+            '../input/cassava-leaf-disease-classification/train_images/',
             transforms=get_inference_transforms(),
             output_label=False,
         )
@@ -244,7 +245,7 @@ def run():
         val_preds = []
         tst_preds = []
 
-        for i, epoch in enumerate(CFG['used_epoches']):
+        for i, epoch in enumerate(CFG['used_epochs']):
             model.load_state_dict(torch.load(
                 '../input/pytorch-efficientnet-baseline-train-amp-aug/{}_fold_{}_{}'.format(
                     CFG['model_arch'],
