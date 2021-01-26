@@ -5,14 +5,54 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.metrics import label_ranking_average_precision_score
 import librosa
+import torch
+import torch.nn as nn
 
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 
 import albumentations
 
+from efficientnet_pytorch import Efficientnet
 
-# class SpeciesModel(tez.Model):
+
+FOLD = 2
+
+
+class SpeciesModel(tez.Model):
+    def __init__(self):
+        super().__init__()
+        self.effnet = Efficientnet.from_pretrained(
+            'efficientnet-b3',
+            weights_path=wp3,
+        )
+        self.effnet._conv_stem.in_channels = 1
+        weight = self.effnet._conv_stem.weight.mean(1, keepdim=True)
+        self.effnet._conv_stem.weight = nn.Parameter(weight)
+        self.dropout = nn.dropout(0.1)
+        self.out = nn.Linear(1536, 24)
+        self.step_scheduler_after = 'epoch'
+        self.step_scheduler_metric = 'valid_label_rank_avg_prec_sc'
+
+    def monitor_metrics(self, outputs, targets):
+        outputs = outputs.cpu().detach().numpy()
+        targets = targets.cpu().detach().numpy()
+
+        return {
+            'label_rank_abf_prec_sc': label_ranking_average_precision_score(targets, outputs)
+        }
+
+    def fetch_optimizer(self):
+        opt = torch.optim.Adam(self.parameters(), lr=1e-3)
+
+        return opt
+
+    def fetch_scheduler(self):
+        rlr = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optim
+        )
+
     
 
 
@@ -36,7 +76,7 @@ class AudioDataset:
     def __len__(self):
         return len(self.audio_paths)
 
-    def __getitem(self, item):
+    def __getitem__(self, item):
         targets = self.targets[item]
         image = build_spectrogram(
             self.audio_paths[item],
@@ -249,13 +289,15 @@ def run():
         augumentations=valid_aug,
     )
     plt.figure(1, figsize=(10, 6))
+    print(valid_dataset)
     plt.imshow(
         valid_dataset[5]['image'].numpy()[0,:,:],
         cmap='inferno'
     )
     plt.show()
 
-
+    wp3 = '../../input/effecientnet-pytorch/efficientnet-b3-c8376fa2.pth'
+    
     
 
        
