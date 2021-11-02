@@ -1,3 +1,4 @@
+import collections
 import os
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -181,26 +182,130 @@ class Model(nn.Module):
 
         return start_logits, end_logits
 
-    def Make_Model(args):
-        config = AutoConfig.from_pretrained(args.config_name)
-        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name)
-        model = Model(args.model_name_or_path, config=config)
 
-        return config, tokenizer, model
+def Make_Model(args):
+    config = AutoConfig.from_pretrained(args.config_name)
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name)
+    model = Model(args.model_name_or_path, config=config)
 
-
-
+    return config, tokenizer, model
 
 
+def Prepare_Test_Features(args, example, tokenizer):
+    exaple["question"] = example["question"].lstrip()
+
+    tokenized_example = tokenizer(
+        example["question"],
+        example["context"],
+        truncation="only_second",
+        max_length=args.max_seq_length,
+        stride=args.doc_stride,
+        return_overflowing_tokens=True,
+        return_offsets_mapping=True,
+        padding="max_length",
+    )
+
+    features = []
+    for i in range(len(tokenized_example["input_ids"])):
+        feature = {}
+        feature["example_id"] = example["id"]
+        feature["context"] = example["context"]
+        feature["question"] = example["question"]
+        feature["input_ids"] = tokenized_example["input_ids"][i]
+        feature["attention_mask"] = tokenized_example["attention_mask"][i]
+        feature["offset_mapping"] = tokenized_example["offset_mapping"][i]
+        feature["sequence_ids"] = [
+            0 if i is None else i for i in tokenized_example.sequence_ids(i)
+        ]
+
+        features.append(feature)
+
+    return features
 
 
-
-
-
-
-
-
-
-
-
+def Postprocess_qa_predictions(
+    examples,
+    features,
+    raw_predictions,
+    n_best_size=20,
+    max_answer_length=30,
+):
+    all_start_logits, all_end_logits = raw_predictions
+    example_id_to_index = {k: i for i, k in enumerate(examples["id"])}
+    features_per_example = collections.defaultdict(list)
     
+    for i, feature in enumerate(features):
+        feature_per_example[example_id_to_index[feature["example_id"]]].append(i)
+
+    predictions = collections.OrderedDict()
+
+    print(f"Post-processing {len(examples)} example predictions")
+    print(f"split into {len(features)} features.")
+
+    for example_index, example in examples.iterrows():
+        feature_indices = features_per_example[example_index]
+        min_null_score = None
+        valid_answers = []
+
+        context = example["context"]
+        for feature_index in feature_indices:
+            start_logits = all_start_logits[feature_index]
+            end_logits = all_end_logits[feature_index]
+
+            sequence_ids = features[feature_index]["offset_mapping"]
+            context_index = 1
+            features[feature_index]["offset_mapping"] = [
+                (o if sequence_ids[k] == context_index else None)
+                for k, o in enumerate(features[feature_index]["offset_mapping"])
+            ]
+            offset_mapping = features[feature_index]["offset_mapping"]
+            cls_index = features[feature_index]["input_ids"].index(tokenizer.cls_token_id)
+            feature_null_score = start_logits[cls_index] + end_logits[cls_index]
+            if min_null_score is None or min_null_score < feature_null_score:
+                min_null_score = feature_null_score
+
+            start_indexes = np.argsort(start_logits)[-1:-n_best_size - 1:-1]\
+              .tolist()
+            end_indexes = np.argsort(end_logits)[-1:-n_best_size - 1:-1]\
+              .tolist()
+            for start_index in start_indexes:
+                for end_index in end_indexes:
+                    if (
+                        start_index >= len(offset_mapping)
+                        or end_index >= len(offset_mapping)
+                        or offset_mapping[start_index] is None
+                        or offset_mapping[end_index] is None
+                    ):
+                        continue
+                    if (
+                        end_index < start_index
+                        or end_index - start_index + 1 > max_answer_length
+                    ):
+                        continue
+
+                    start_char = offset_mapping[start_index][0]
+                    end_char = offset_mapping[end_index][1]
+                    valid_answers.append({
+                         "score": start_logits[start_index] + end_logits[end_index],
+                         "text": context[start_char: end_char],
+                    })
+
+        if len(valid_answers) > 0:
+            best_answer = sorted(
+                valid_answers, key=lambda x: x["score"], reverse=True)[0]
+        else:
+            best_answer = { "text": "", "score": 0.0 }
+        predictions[example["id"]] = best_answer["text"]
+
+    return predictions
+
+
+test_df = pd.read_csv(
+    "../../data/chaii-hindi-and-tamil-question-answering/test.csv"
+)
+test_df["context"] = test_df["context"].apply(lambda x: "".join(x.split()))
+test_df["question"] = test_df["question"].apply(lambda x: "".join(x.split()))
+
+tokenizer = AutoTokenizer.from_pretrained(Configration().tokenizer_name)
+test_features = []
+for i, row in test_df.
