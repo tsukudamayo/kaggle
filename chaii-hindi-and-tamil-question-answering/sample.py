@@ -299,13 +299,107 @@ def Postprocess_qa_predictions(
 
     return predictions
 
+def Get_Predictions(checkpoint_path):
+    config, tokenizer, model = Make_Model(Configration())
+    model.cuda()
+    model.load_state_dict(
+        torch.load(base_model + checkpoint_path)
+    )
+
+    start_logits = []
+    end_logits = []
+
+    for batch in test_dataloader:
+        with torch.no_grad():
+            outputs_start, outputs_end = model(
+                batch["input_ids"].cuda(),
+                batch["attention_mask"].cuda(),
+            )
+            start_logits.append(outputs_start.cpu().numpy.tolist())
+            end_logits.append(outputs_end.cpu().numpy().tolist())
+            del outputs_start, outputs_end
+
+    del model, tokenizer, config
+    gc.collect()
+
+    return np.vstack(start_logits), np.vstack(end_logits)
+            
 
 test_df = pd.read_csv(
-    "../../data/chaii-hindi-and-tamil-question-answering/test.csv"
+    "../input/chaii-hindi-and-tamil-question-answering/test.csv"
 )
 test_df["context"] = test_df["context"].apply(lambda x: "".join(x.split()))
 test_df["question"] = test_df["question"].apply(lambda x: "".join(x.split()))
 
 tokenizer = AutoTokenizer.from_pretrained(Configration().tokenizer_name)
 test_features = []
-for i, row in test_df.
+for i, row in test_df.iterrows():
+    test_feature += Prepare_Test_Features(Configration(), row, tokenizer)
+
+args = Configration()
+test_dataset = DatasetRetriver(test_features, mode="test")
+test_dataloader = DataLoader(
+    test_dataset,
+    batch_size=args.eval_batch_size,
+    sampler=SequentialSampler(test_dataset),
+    num_workers=optimal_num_of_loader_workers(),
+    pin_memory=True,
+    drop_last=False,
+)
+base_model = "../../input/5foldsroberta/output/"
+
+start_logits1, end_logits1 = Get_Predictions("checkpoint-fold-0/pytorch.model.bin")
+start_logits2, end_logits2 = Get_Predictions("checkpoint-fold-1/pytorch.model.bin")
+start_logits3, end_logits3 = Get_Predictions("checkpoint-fold-2/pytorch.model.bin")
+start_logits4, end_logits4 = Get_Predictions("checkpoint-fold-3/pytorch.model.bin")
+start_logits5, end_logits5 = Get_Predictions("checkpoint-fold-4/pytorch.model.bin")
+
+start_logits = (start_logits1 + start_logits2 + start_logits3 + start_logits4 + start_logits5)/5
+end_logits = (end_logits1 + end_logits2 + end_logits3 + end_logits4 + end_logits5)/5
+
+fin_preds = Postprocess_qa_predictions(
+    test_df,
+    test_features,
+    (start_logits, end_logits),
+)
+
+submission = []
+for p1, p2 in fin_preds.items():
+    p2 = " ".join(p2.split())
+    p2 = p2.strip(punctuation)
+    submission.append((p1, p2))
+
+sample = pd.DataFrame(submission, columns=["id", "PredictionString"])
+test_data = pd.merge(left=test_df, right=sample, on="id")
+
+bad_starts = [".", ",", "(", ")", "-", "–",  ",", ";"]
+bad_endings = ["...", "-", "(", ")", "–", ",", ";"]
+
+tamil_ad = "கி.பி"
+tamil_bc = "கி.மு"
+tamil_km = "கி.மீ"
+hindi_ad = "ई"
+hindi_bc = "ई.पू"
+
+cleaned_preds = []
+for pred, context in test_data[["PredictionString", "context"]].to_numpy():
+    if pred == "":
+        cleaned_preds.append(pred)
+        continue
+    while any([pred.startswith(y) for y in bad_starts]):
+        pred = pred[1:]
+    while any([pred.endswith(y) for y in bad_endings]):
+        if pred.endswith("..."):
+            pred = pred[:-3]
+        else:
+            pred = pred[:-1]
+    if pred.endswith("..."):
+        pred = pred[:-3]
+
+    if any([pred.endswith(tamil_ad), pred.endswith(tamil_bc), pred.endswith(tamil_km), pred.endswith(hindi_ad), pred.endswith(hindi_bc)]) and pred+"." in context:
+        pred = pred + "."
+
+    cleaned_preds.append(pred)
+
+test_data["PredictionString"] = cleaned_preds
+test_data[["id", "PredictionString"]].to_csv("submission.csv", index=False)
