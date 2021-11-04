@@ -67,14 +67,14 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 class Configration:
     model_type = "xlm_roberta"
-    model_name_or_path = "../../model/xlm-roberta-large-squad-v2"
-    config_name = "../../model/xlm-roberta-large-squad-v2"
+    model_name_or_path = "deepset/xlm-roberta-large-squad2"
+    config_name = "deepset/xlm-roberta-large-squad2"
     fp16 = True if APEX_INSTALLED else False
     fp16_opt_level = "01"
     gradient_accumulation_steps = 2
 
     # tokenizer
-    tokenizer_name = "../../model/xlm-roberta-large-squad-v2"
+    tokenizer_name = "deepset/input/xlm-roberta-large-squad2"
     max_seq_length = 400
     doc_stride = 135
 
@@ -105,7 +105,7 @@ class Configration:
 # Dataset_Retriever class
 class DatasetRetriver(Dataset):
     def __init__(self, features, mode="train"):
-        super(Dataset_Retriver, self).__init__()
+        super(DatasetRetriver, self).__init__()
         self.features = features
         self.mode = mode
 
@@ -192,7 +192,7 @@ def Make_Model(args):
 
 
 def Prepare_Test_Features(args, example, tokenizer):
-    exaple["question"] = example["question"].lstrip()
+    example["question"] = example["question"].lstrip()
 
     tokenized_example = tokenizer(
         example["question"],
@@ -334,7 +334,7 @@ test_df["question"] = test_df["question"].apply(lambda x: "".join(x.split()))
 tokenizer = AutoTokenizer.from_pretrained(Configration().tokenizer_name)
 test_features = []
 for i, row in test_df.iterrows():
-    test_feature += Prepare_Test_Features(Configration(), row, tokenizer)
+    test_features += Prepare_Test_Features(Configration(), row, tokenizer)
 
 args = Configration()
 test_dataset = DatasetRetriver(test_features, mode="test")
