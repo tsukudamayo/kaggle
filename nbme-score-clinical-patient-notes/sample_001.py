@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 pd.set_option("display.max_rows", 500)
 pd.set_option("display.max_columns", 500)
-pd.set_option("dispaly.width", 1000)
+pd.set_option("display.width", 1000)
 from sklearn.metrics import f1_score
 import torch
 import tokenizers
@@ -127,8 +127,36 @@ def get_score(y_true, y_pred):
     return span_micro_f1(y_true, y_pred)
 
 
+class DataLoader:
+
+    def __init__(self, data_dir):
+        self.features = self.preprocess_features(pd.read_csv(data_dir + "features.csv"))
+        self.patient_notes = pd.read_csv(data_dir + "patient_notes.csv")
+        self.test = pd.read_csv(data_dir + "test.csv")\
+          .merge(self.features, on=["feature_num", "case_num"], how="left")\
+          .merge(self.patient_notes, on=["pn_num", "case_num"], how="left")
+        self.submission = pd.read_csv(data_dir + "sample_submission.csv")
+
+    def preprocess_features(self, features: pd.DataFrame) -> pd.DataFrame:
+        features.loc[27, "feature_text"] = "Last-Pap-smear-1-year-ago"
+
+        return features
+
 w1 = 1
 w2 = 0
 w3 = 0
 
 seed_everything(seed=42)
+
+data_dir = "../../input/nbme-score-clinical-patient-notes/"
+dataset = DataLoader(data_dir=data_dir)
+test = dataset.test
+features = dataset.features
+patient_notes = dataset.patient_notes
+
+print(f"test.shape: {test.shape}")
+print(f"features.shape: {features.shape}")
+print(f"patient_notes.shape: {patient_notes.shape}")
+print(features.head())
+print(patient_notes.head())
+print(test.head())
