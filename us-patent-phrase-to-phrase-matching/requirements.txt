@@ -1,0 +1,9 @@
+joblib
+scipy
+numpy
+pandas
+tqdm
+scikit-learn
+torch
+tokenizers
+transformers

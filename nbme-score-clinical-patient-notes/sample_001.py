@@ -13,6 +13,7 @@ import torch
 import tokenizers
 import transformers
 from transformers import AutoTokenizer, AutoModel, AutoConfig
+from transformers.models.deberta_v2.tokenization_deberta_v2 import DebertaV2Tokenizer
 
 
 def seed_everything(seed=42):
@@ -142,6 +143,22 @@ class DataLoader:
 
         return features
 
+
+class CFG:
+    num_workers = 4
+    path = "../../input/nbme-score-clinical-patient-notes/deberta-v3-large-5-folds-public/"
+    data_dir = "../../input/nbme-score-clinical-patient-notes/"
+    config_path = path + "config.pth"
+    model = "microsoft/deberta-v3-large"
+    batch_size = 32
+    fc_dropout = 0.2
+    max_len = 354
+    seed = 42
+    n_fold = 5
+    trn_fold = [0, 1, 2, 3, 4]
+    tokenizer = DebertaV2Tokenizer.from_pretrained(model)
+
+
 w1 = 1
 w2 = 0
 w3 = 0
@@ -160,3 +177,4 @@ print(f"patient_notes.shape: {patient_notes.shape}")
 print(features.head())
 print(patient_notes.head())
 print(test.head())
+
