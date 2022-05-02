@@ -1,4 +1,8 @@
 import os
+from typing import TypeVar
+from dataclasses import dataclass
+
+
 import spacy
 import warnings
 import wordcloud
@@ -9,28 +13,39 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 
-RANDOM_IDX = 12
+RANDOM_IDX = 43
 warnings.filterwarnings("ignore")
 
 
-def load_dataset() -> None:
-    train = pd.read_csv("../data/nbme-score-clinical-patient-notes/train.csv")
-    test = pd.read_csv("../data/nbme-score-clinical-patient-notes/test.csv")
-    features = pd.read_csv("../data/nbme-score-clinical-patient-notes/features.csv")
-    patient_notes = pd.read_csv("../data/nbme-score-clinical-patient-notes/patient_notes.csv")
-    submission = pd.read_csv("../data/nbme-score-clinical-patient-notes/sample_submission.csv")
+@dataclass
+class Dataset():
+    train: pd.DataFrame
+    test: pd.DataFrame
+    features: pd.DataFrame
+    patient_notes: pd.DataFrame
 
-    print(train.head())
-    print(test.head())
-    print(features.head())
-    print(patient_notes.haed())
+    def __init__(
+        self,
+        train: pd.DataFrame,
+        test: pd.DataFrame,
+        features: pd.DataFrame,
+        patient_notes: pd.DataFrame,
+    ):
+        self.train = train
+        self.test = test
+        self.features = features
+        self.patient_notes = patient_notes
 
 
-def main():
-    load_dataset()
-    
-    
 
+dataset = Dataset(
+    train=pd.read_csv("../../input/nbme-score-clinical-patient-notes/train.csv"),
+    test=pd.read_csv("../../input/nbme-score-clinical-patient-notes/test.csv"),
+    features=pd.read_csv("../../input/nbme-score-clinical-patient-notes/features.csv"),
+    patient_notes=pd.read_csv("../../input/nbme-score-clinical-patient-notes/patient_notes.csv")
+)
+print(dataset.train.head())
+print(dataset.test.head())
+print(dataset.features.head())
+print(dataset.patient_notes.head())
 
-if __name__ == "__main__":
-    main()
