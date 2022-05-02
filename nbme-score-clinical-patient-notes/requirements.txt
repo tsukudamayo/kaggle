@@ -11,3 +11,7 @@ isort
 mypy
 pyright
 pytest
+torch
+sklearn
+tokenizers
+transformers
