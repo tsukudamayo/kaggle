@@ -1,10 +1,12 @@
 import os
 import random
-from typing import Optional
+from typing import Optional, Tuple
+import gc
 
 import scipy as sp
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm
 
 import torch
 import torch.nn as nn
@@ -123,8 +125,37 @@ class CustomModel(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def feature(self, inputs):
+    def feature(self, inputs: Tuple[torch.FloatTensor]) -> torch.Tensor:
         outputs = self.model(**inputs)
+        last_hidden_states = outputs[0]
+        weights = self.attention(last_hidden_states)
+        feature = torch.sum(weights * last_hidden_states)
+
+        return feature
+
+    def forward(self, inputs: Tuple[torch.FloatTensor]) -> nn.Dropout:
+        feature = self.feature(inputs)
+        output = self.fc(self.fc_dropout(feature))
+
+        return output
+
+
+def inference_fn(
+    test_loader: DataLoader,
+    model: CustomModel,
+    device: torch.device,
+) -> np.ndarray:
+    preds = []
+    model.eval()
+    tk0 = tqdm(test_loader, total=len(test_loader))
+    for inputs in tk0:
+        inputs[k] = v.to(device)
+    with torch.no_grad():
+        y_preds: CustomModel = model(inputs)
+    preds.append(y_preds.sigmoid().to("cpu").numpy())
+    predictions = np.concatenate(preds)
+
+    return predictions
 
 
 
@@ -144,3 +175,38 @@ print(test.head())
 
 test["text"] = test["anchor"] + "[SEP]" + test["target"] + "[SEP]" + test["context_text"]
 print(test.head())
+
+test_dataset = TestDataset(CFG, test)
+test_loader = DataLoader(
+    test_dataset,
+    batch_size=CFG.batch_size,
+    shuffle=False,
+    num_workers=CFG.num_workers,
+    pin_memory=True,
+    drop_last=False,
+)
+predictions = []
+for fold in CFG.trn_fold:
+    model = CustomModel(
+        CFG,
+        config_path=CFG.config_path,
+        pretrained=False
+    )
+    state = torch.load(
+        CFG.path + f"{CFG.model.replace("/", "-")}_fold{fold}_best.pth",
+        map_location=torch.device("cpu")
+    )
+    model.load_state_dict(state["model"])
+    prediction = inference_fn(test_loader, model, device)
+    predictions.append(prediction)
+
+    del model, state, prediction
+    gc.collect()
+
+    torch.cuda.empty_cache()
+predictions = np.mean(predictions, axis=0)
+
+sumission["score"] = predictions
+print(submission.head())
+sumission[["id", "score"]].to_csv("submission.csv", index=False)
+
