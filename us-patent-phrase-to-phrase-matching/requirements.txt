@@ -7,3 +7,7 @@ scikit-learn
 torch
 tokenizers
 transformers
+pyLDAvis
+gensim
+spacy
+

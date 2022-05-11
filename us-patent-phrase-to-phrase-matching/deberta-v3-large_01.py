@@ -30,7 +30,6 @@ class CFG:
     seed = 42
     n_fold = 4
     trn_fold = [0, 1, 2, 3]
-    tokenizer = AutoTokenizer.from_pretrained(CFG.path + "tokeninzer/")
 
 
 def get_score(y_true, y_pred):
@@ -80,7 +79,7 @@ class CustomModel(nn.Module):
     def __init__(
         self,
         cfg: CFG,
-        config_path: Optional[str | None] = None,
+        config_path: Optional[str] = None,
         pretrained: Optional[bool] = False,
     ):
         super().__init__()
@@ -158,16 +157,29 @@ def inference_fn(
     return predictions
 
 
+def get_cpc_texts():
+    contexts = []
+    pattern = "[A-Z]\d+"
+    for file_name in os.listdir("../input/cp
+
+
 
 seed_everything(seed=42)
+# train
+train = pd.read_csv(INPUT_DIR + "train.csv")
+# test
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 test = pd.read_csv(INPUT_DIR + "test.csv")
 submission = pd.read_csv(INPUT_DIR + "sample_submission.csv")
+print(f"train.shape: {train.shape}")
 print(f"test.shape: {test.shape}")
 print(f"submission.shape: {submission.shape}")
+print(train.head())
 print(test.head())
 print(submission.head())
+
+CFG.tokenizer = AutoTokenizer.from_pretrained(CFG.path + "tokenizer/")
 
 cpc_texts = torch.load(CFG.path + "cpc_texts.pth")
 test["contenxt_text"] = test["context"].map(cpc_texts)
