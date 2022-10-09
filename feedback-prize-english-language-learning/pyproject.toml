@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "feedback-prize-english-language-learning"
+version = "0.1.0"
+description = ""
+authors = ["tsukudamayo <tsukudamayo@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "feedback_prize_english_language_learning"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+kaggle = "^1.5.12"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

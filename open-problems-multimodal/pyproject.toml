@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "open-problems-multimodal"
+version = "0.1.0"
+description = ""
+authors = ["tsukudamayo <tsukudamayo@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "open_problems_multimodal"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+kaggle = "^1.5.12"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
