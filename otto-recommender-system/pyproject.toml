@@ -9,8 +9,9 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.11"
 pandas = "^1.5.2"
+seaborn = "^0.12.2"
+matplotlib = "^3.6.2"
 kaggle = "^1.5.12"
-tqdm = "^4.64.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.0"
